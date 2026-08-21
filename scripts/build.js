@@ -18,6 +18,28 @@ const ASSETS_DIR = path.join(ROOT, "assets");
 
 const INCLUDE_DRAFTS = process.argv.includes("--drafts");
 
+// GitHub Pages 프로젝트 사이트(예: https://아이디.github.io/저장소이름/)처럼
+// 사이트가 도메인 루트가 아닌 하위 경로에 배포되는 경우를 위한 base path.
+// site.config.js의 url에 담긴 경로 부분(예: "/my-blog")을 그대로 사용합니다.
+const BASE = (() => {
+  try {
+    return new URL(config.url).pathname.replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+})();
+
+function withBase(p) {
+  return BASE + p;
+}
+
+// 루트 기준 경로("/..." )만 base path를 붙여 보정하고,
+// 이미 절대 URL(https://...)이거나 상대 경로인 경우는 그대로 둡니다.
+function maybeBase(p) {
+  if (/^\/(?!\/)/.test(p)) return withBase(p);
+  return p;
+}
+
 // ---------- 기본 유틸 ----------
 function slugify(str) {
   return String(str)
@@ -127,10 +149,11 @@ function inline(text) {
     return "\x01" + (codeSpans.length - 1) + "\x02";
   });
 
-  // 이미지
-  t = t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => `<img src="${src}" alt="${alt}">`);
+  // 이미지 (posts/ 안에서 /assets/그림.jpg 처럼 루트 기준 경로를 써도
+  // GitHub Pages 프로젝트 사이트의 하위 경로(BASE)에 맞게 자동으로 보정합니다)
+  t = t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => `<img src="${maybeBase(src)}" alt="${alt}">`);
   // 링크
-  t = t.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_, label, href) => `<a href="${href}">${label}</a>`);
+  t = t.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_, label, href) => `<a href="${maybeBase(href)}">${label}</a>`);
   // 굵게
   t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   t = t.replace(/__([^_]+)__/g, "<strong>$1</strong>");
@@ -336,9 +359,9 @@ function layout({ title, description, url, content, extraHead = "" }) {
 <title>${escapeXml(pageTitle)}</title>
 <meta name="description" content="${escapeXml(description || config.description)}">
 <link rel="canonical" href="${config.url}${url}">
-<link rel="alternate" type="application/rss+xml" title="${escapeXml(config.title)}" href="/rss.xml">
+<link rel="alternate" type="application/rss+xml" title="${escapeXml(config.title)}" href="${withBase("/rss.xml")}">
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="${withBase("/assets/style.css")}">
 <meta property="og:title" content="${escapeXml(pageTitle)}">
 <meta property="og:description" content="${escapeXml(description || config.description)}">
 <meta property="og:type" content="website">
@@ -347,9 +370,9 @@ ${extraHead}
 <body>
 <header class="site-header">
   <div class="wrap">
-    <a class="site-title" href="/">${escapeXml(config.title)}</a>
+    <a class="site-title" href="${withBase("/")}">${escapeXml(config.title)}</a>
     <nav class="site-nav">
-      ${config.nav.map((n) => `<a href="${n.href}">${escapeXml(n.label)}</a>`).join("\n      ")}
+      ${config.nav.map((n) => `<a href="${withBase(n.href)}">${escapeXml(n.label)}</a>`).join("\n      ")}
     </nav>
   </div>
 </header>
@@ -368,13 +391,13 @@ ${content}
 function tagChips(tags) {
   if (!tags.length) return "";
   return `<div class="tags">${tags
-    .map((t) => `<a class="tag" href="/tags/${slugify(t)}/">#${escapeXml(t)}</a>`)
+    .map((t) => `<a class="tag" href="${withBase(`/tags/${slugify(t)}/`)}">#${escapeXml(t)}</a>`)
     .join("")}</div>`;
 }
 
 function postCard(post) {
   return `<article class="post-card">
-  <h2><a href="${post.url}">${escapeXml(post.title)}</a></h2>
+  <h2><a href="${withBase(post.url)}">${escapeXml(post.title)}</a></h2>
   <div class="post-meta">
     <time datetime="${post.dateISO}">${post.dateDisplay}</time>
     <span aria-hidden="true">·</span>
@@ -396,9 +419,9 @@ function renderHome(posts) {
       : `<p class="empty">아직 작성된 글이 없습니다. posts/ 폴더에 첫 글을 추가해보세요!</p>`;
 
     const pagination = `<nav class="pagination">
-      ${page > 1 ? `<a href="${page === 2 ? "/" : `/page/${page - 1}/`}">← 이전</a>` : "<span></span>"}
+      ${page > 1 ? `<a href="${withBase(page === 2 ? "/" : `/page/${page - 1}/`)}">← 이전</a>` : "<span></span>"}
       <span class="page-indicator">${page} / ${pageCount}</span>
-      ${page < pageCount ? `<a href="/page/${page + 1}/">다음 →</a>` : "<span></span>"}
+      ${page < pageCount ? `<a href="${withBase(`/page/${page + 1}/`)}">다음 →</a>` : "<span></span>"}
     </nav>`;
 
     const content = `<section class="hero">
@@ -436,7 +459,7 @@ function renderPost(post) {
   <div class="post-body">
   ${post.html}
   </div>
-  <p class="back-link"><a href="/">← 목록으로</a></p>
+  <p class="back-link"><a href="${withBase("/")}">← 목록으로</a></p>
 </article>`;
 
   const html = layout({
@@ -463,7 +486,7 @@ function renderTags(posts) {
     .sort((a, b) => b[1].posts.length - a[1].posts.length)
     .map(
       ([key, { name, posts }]) =>
-        `<a class="tag tag-lg" href="/tags/${key}/">#${escapeXml(name)} <span class="count">${posts.length}</span></a>`
+        `<a class="tag tag-lg" href="${withBase(`/tags/${key}/`)}">#${escapeXml(name)} <span class="count">${posts.length}</span></a>`
     )
     .join("\n");
 
@@ -482,7 +505,7 @@ function renderTags(posts) {
 <section class="post-list">
 ${taggedPosts.map(postCard).join("\n")}
 </section>
-<p class="back-link"><a href="/tags/">← 태그 목록</a></p>`;
+<p class="back-link"><a href="${withBase("/tags/")}">← 태그 목록</a></p>`;
 
     write(
       path.join(OUT_DIR, "tags", key, "index.html"),
@@ -500,7 +523,7 @@ function render404() {
   const content = `<div class="not-found">
   <h1>404</h1>
   <p>페이지를 찾을 수 없습니다.</p>
-  <p><a href="/">← 홈으로 돌아가기</a></p>
+  <p><a href="${withBase("/")}">← 홈으로 돌아가기</a></p>
 </div>`;
   write(
     path.join(OUT_DIR, "404.html"),
