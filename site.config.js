@@ -11,7 +11,7 @@ export default {
 
   // 배포 후 실제 주소 (예: https://username.github.io/my-blog)
   // GitHub Pages로 배포하기 전까지는 몰라도 괜찮습니다. 나중에 채워 넣으세요.
-  url: "https://example.com",
+  url: "https://shengh807.github.io/my-blog",
 
   // 헤더 상단 메뉴 (필요하면 추가/삭제 가능)
   nav: [
